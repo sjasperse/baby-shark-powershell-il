@@ -1,10 +1,7 @@
-clear
-$ErrorActionPreference = "Stop"
 $basePath = $PWD.Path
 if (Test-Path "$basePath\BabyShark.exe") {
     Remove-Item "$basePath\BabyShark.exe"
     Remove-Item "$basePath\BabyShark.pdb"
-    Write-Host "Removed old files"
 }
 
 $assemblyName = new-object System.Reflection.AssemblyName
@@ -15,14 +12,9 @@ $typeBuilder = $moduleBuilder.DefineType("Program", [System.Reflection.TypeAttri
 $method = $typeBuilder.DefineMethod("Main", [System.Reflection.MethodAttributes]::Public -bor [System.Reflection.MethodAttributes]::Static)
 
 $il = $method.GetILGenerator()
-$il.EmitWriteLine([DateTime]::Now.ToShortTimeString())
 
 $family = @("Baby", "Daddy", "Mommy", "Grandpa", "Grandma")
 $doos = [string]::Join(" ", ((1..6) | % { "doo" }))
-# foreach ($member in $family) {
-#     (1..3) | % { $il.EmitWriteLine("$member shark $([string]::Join(" ", $dos))") }
-#     $il.EmitWriteLine("$member shark!")
-# }
 
 function Get-OpCode($name) {
     $field = [System.Reflection.Emit.OpCodes].GetField($name, [System.Reflection.BindingFlags]::Static -bor [System.Reflection.BindingFlags]::Public)
@@ -55,7 +47,6 @@ function Emit-IL($name, $value) {
             $value = $null 
         }
     }
-    
 
     $code = Get-OpCode $name
     if ($value -eq $null) {
@@ -88,7 +79,7 @@ Emit-IL "Stloc_S" $doosLocal.LocalIndex
 
 $il.Emit([System.Reflection.Emit.OpCodes]::Nop)
 
-function Write-ForEach($sourceLocal, $itemName) {
+function Write-ForEach($sourceLocal, $itemName, $body) {
     #init foreach
     $label0 = $il.DefineLabel()
     $label1 = $il.DefineLabel()
@@ -101,7 +92,7 @@ function Write-ForEach($sourceLocal, $itemName) {
     $itemLocal = $il.DeclareLocal([string])
     $itemLocal.SetLocalSymInfo($itemName)
 
-    $il.Emit([System.Reflection.Emit.OpCodes]::Ldc_I4_0)
+    Emit-IL "Ldc_I4_0"
     Emit-IL "Stloc_S" $indexLocal.LocalIndex
     $il.Emit([System.Reflection.Emit.OpCodes]::Br_S, $label1)
 
@@ -112,7 +103,7 @@ function Write-ForEach($sourceLocal, $itemName) {
     Emit-IL "Stloc_S" $itemLocal.LocalIndex
 
     # no op
-    # ** BODY **
+    $body.Invoke($itemLocal)
     # no op
 
     Emit-IL "LdLoc_S" $indexLocal.LocalIndex
@@ -128,14 +119,58 @@ function Write-ForEach($sourceLocal, $itemName) {
     $il.Emit([System.Reflection.Emit.OpCodes]::Blt_S, $label0)
 }
 
-Write-ForEach $familyLocal "member"
+function Write-For($start, $end, $body) {
+    $indexLocal = $il.DeclareLocal([int])
+    $indexLocal.SetLocalSymInfo("i")
+    $loopLocal = $il.DeclareLocal([bool])
+    $label0 = $il.DefineLabel()
+    $label1 = $il.DefineLabel()
+
+    Emit-IL "Ldc_I4_S" $start
+    Emit-IL "Stloc_S" $indexLocal.LocalIndex
+    Emit-IL "Br_S" $label1
+
+    $il.MarkLabel($label0)
+    Emit-IL "Nop"
+
+    $body.Invoke()
+
+    Emit-IL "Ldloc_S" $indexLocal.LocalIndex
+    Emit-IL "Ldc_I4_1"
+    Emit-IL "Add"
+    Emit-IL "Stloc_S" $indexLocal.LocalIndex
+
+    $il.MarkLabel($label1)
+    Emit-IL "Ldloc_S" $indexLocal.LocalIndex
+    Emit-IL "Ldc_I4_S" ($end + 1)
+    Emit-IL "Clt"
+    Emit-IL "Stloc_S" $loopLocal.LocalIndex
+    Emit-IL "Ldloc_S" $loopLocal.LocalIndex
+    Emit-IL "Brtrue_S" $label0
+}
+
+[Type[]]$singleString = @([string])
+[Type[]]$twoStrings = @([string],[string])
+[Type[]]$threeStrings = @([string],[string],[string])
 
 
+Write-ForEach $familyLocal "member" { 
+    param ($item)
 
 
+    Write-For 1 3 {
+        Emit-IL "Ldloc_S" $item.LocalIndex
+        Emit-IL "Ldstr" " shark "
+        Emit-IL "Ldloc_S" $doosLocal.LocalIndex
+        $il.EmitCall([System.Reflection.Emit.OpCodes]::Call, [string].GetMethod("Concat", $threeStrings), $threeStrings)
+        $il.EmitCall([System.Reflection.Emit.OpCodes]::Call, [System.Console].GetMethod("WriteLine", $singleString), $singleString)
+    }
 
-
-
+    Emit-IL "Ldloc_S" $item.LocalIndex
+    Emit-IL "Ldstr" " shark!"
+    $il.EmitCall([System.Reflection.Emit.OpCodes]::Call, [string].GetMethod("Concat", $twoStrings), $twoStrings)
+    $il.EmitCall([System.Reflection.Emit.OpCodes]::Call, [System.Console].GetMethod("WriteLine", $singleString), $singleString)
+}
 
 $il.Emit([System.Reflection.Emit.OpCodes]::Ret)
 
@@ -150,4 +185,4 @@ $ildasm = "C:\Program Files (x86)\Microsoft SDKs\Windows\v10.0A\bin\NETFX 4.6.1 
 
 ilspycmd "$basePath\BabyShark.exe"
 
-# & "$basePath\BabyShark.exe"
+& "$basePath\BabyShark.exe"
