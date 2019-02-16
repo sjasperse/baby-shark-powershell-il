@@ -4,6 +4,8 @@ I was feeling masochistic one night... so I spent hours of my life I'll never ge
 
 I did not start the night knowing much about IL, so it took far more time than I had any reason to put into it.
 
+[Behold, this hideous piece of scripting](BabyShark.ps1)
+
 ## Output
 ```
 Baby shark doo doo doo doo doo doo
